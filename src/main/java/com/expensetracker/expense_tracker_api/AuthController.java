@@ -6,6 +6,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.UUID;
+
 @RestController
 @RequestMapping("/auth")
 public class AuthController {
@@ -27,9 +29,32 @@ public class AuthController {
         User user = new User();
         user.setEmail(request.getEmail());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setEmailVerified(false);
+
+        String token = UUID.randomUUID().toString();
+        user.setVerificationToken(token);
+
         userRepository.save(user);
 
-        return jwtUtil.generateToken(user.getEmail());
+        // Simulam trimiterea emailului: afisam tokenul in consola
+        System.out.println("=== EMAIL SIMULAT ===");
+        System.out.println("Catre: " + user.getEmail());
+        System.out.println("Link de verificare: http://localhost:5173/verify-email?token=" + token);
+        System.out.println("======================");
+
+        return "Cont creat! Verifica consola backend-ului pentru link-ul de confirmare (simulat).";
+    }
+
+    @PostMapping("/verify-email")
+    public String verifyEmail(@RequestParam String token) {
+        User user = userRepository.findByVerificationToken(token)
+                .orElseThrow(() -> new RuntimeException("Token invalid"));
+
+        user.setEmailVerified(true);
+        user.setVerificationToken(null);
+        userRepository.save(user);
+
+        return "Email confirmat cu succes! Te poti autentifica acum.";
     }
 
     @PostMapping("/login")
@@ -37,6 +62,13 @@ public class AuthController {
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
         );
+
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow();
+
+        if (!user.isEmailVerified()) {
+            throw new RuntimeException("Email neconfirmat. Verifica-ti inbox-ul.");
+        }
 
         return jwtUtil.generateToken(request.getEmail());
     }
